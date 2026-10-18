@@ -155,16 +155,28 @@ claude mcp add relaydesk -- node /absolute/path/to/relaydesk/bin/relaydesk.mjs m
 - **Not a sandbox.** A worker runs with your user's permissions on any path you
   give it. Only pair relays and workers you control.
 
+## Running it unattended
+
+Autostart without a console window, interface binding, token handling, and the
+recovery behaviour of queued, lost and requeued jobs are in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
+
 ## Platform support
 
 | host | relay | worker | UI |
 |---|---|---|---|
-| Windows 10/11 x64 | yes | yes | yes |
-| Windows on ARM | expected, untested | expected, untested | yes |
-| macOS (Intel / Apple silicon) | yes | yes | yes |
-| Linux x64 / arm64 | yes | yes | yes |
-| Android / iOS browser | — | — | yes |
-| Windows 10 Mobile (EOL 2020-01) | — | — | best effort only, no support |
+| Windows 11 x64 | tested | tested | tested |
+| Windows 10 x64 | expected, untested | expected, untested | expected, untested |
+| Windows on ARM | untested | untested | untested |
+| macOS (Intel / Apple silicon) | untested | untested | untested |
+| Linux x64 / arm64 | untested | untested | untested |
+| Android / iOS browser | — | — | untested on a device; verified at 375 px and 812 px viewport sizes |
+| Windows 10 Mobile (EOL 2020-01) | — | — | no support |
+
+Nothing in the runtime is OS-specific — no native addon, no platform branch, no
+`socket()`/named-pipe assumption — but "no platform branch" is not the same as
+"tested there". Only the Windows 11 x64 row was exercised by a human on real
+hardware. Test reports for the others are welcome.
 
 The only native dependency is whatever the worker's capabilities shell out to.
 Nothing in the relay or the worker is OS-specific.
