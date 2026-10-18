@@ -30,11 +30,6 @@ export async function readJson(path, fallback = null) {
   }
 }
 
-export function truncate(text, limit) {
-  if (text.length <= limit) return text;
-  return text.slice(0, limit) + `\n... [truncated ${text.length - limit} chars]`;
-}
-
 export function parseDuration(value, fallbackMs) {
   if (value == null) return fallbackMs;
   const match = /^(\d+)(ms|s|m|h)?$/.exec(String(value));
