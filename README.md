@@ -50,7 +50,7 @@ Requires Node.js 22+ on the machine that runs the relay and the worker. The
 phone needs only a browser.
 
 ```bash
-git clone <this repo> && cd relaydesk
+git clone https://github.com/AIMetaPhD/relaydesk.git && cd relaydesk
 node bin/relaydesk.mjs serve
 ```
 
