@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { VERSION } from "./version.mjs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,6 +69,71 @@ async function serveStatic(res, pathname) {
   }
 }
 
+export const QUEUED_JOB_TTL_MS = 10 * 60 * 1000;
+// A worker claims a job by switching it to `running`. If it dies before
+// reporting, nothing else will ever touch that job. After this lease the relay
+// puts it back in the queue exactly once, so it is not silently orphaned.
+export const RUNNING_JOB_LEASE_MS = 5 * 60 * 1000;
+
+export function expireStaleJobs(store, nowMs = Date.now()) {
+  const cutoff = nowMs - QUEUED_JOB_TTL_MS;
+  let expired = 0;
+  for (const job of store.state.jobs) {
+    if (job.status !== "queued") continue;
+    if (Date.parse(job.createdAt) > cutoff) continue;
+    store.updateJob(job.id, { status: "failed", error: "no worker took this job within 10 minutes" });
+    store.addEntry({
+      caseId: job.caseId,
+      kind: "result",
+      text: `${job.capability} expired: no worker took it`,
+      data: { jobId: job.id, capability: job.capability },
+      source: "relay",
+    });
+    expired += 1;
+  }
+  return expired;
+}
+
+/**
+ * Re-queue a running job whose worker stopped reporting, at most once. A
+ * second lease expiry fails it: repeating could duplicate side effects, and
+ * the README promises no exactly-once delivery.
+ */
+export function reclaimLostJobs(store, nowMs = Date.now()) {
+  const cutoff = nowMs - RUNNING_JOB_LEASE_MS;
+  let reclaimed = 0;
+  for (const job of store.state.jobs) {
+    if (job.status !== "running") continue;
+    if (Date.parse(job.updatedAt) > cutoff) continue;
+    if (job.reclaimed) {
+      store.updateJob(job.id, { status: "failed", error: "worker stopped reporting after a retry" });
+      store.addEntry({
+        caseId: job.caseId,
+        kind: "result",
+        text: `${job.capability} failed: worker went silent twice`,
+        data: { jobId: job.id, capability: job.capability },
+        source: "relay",
+      });
+    } else {
+      store.updateJob(job.id, {
+        status: "queued",
+        workerId: null,
+        reclaimed: true,
+        error: "requeued: the worker that took this job stopped reporting",
+      });
+      store.addEntry({
+        caseId: job.caseId,
+        kind: "note",
+        text: `${job.capability} requeued: previous worker went silent`,
+        data: { jobId: job.id, capability: job.capability },
+        source: "relay",
+      });
+    }
+    reclaimed += 1;
+  }
+  return reclaimed;
+}
+
 export async function startServer({ dataDir, host = "0.0.0.0", port = 7331, log = console.log }) {
   const store = new Store(join(dataDir, "relaydesk.json"));
   await store.load();
@@ -99,6 +165,14 @@ export async function startServer({ dataDir, host = "0.0.0.0", port = 7331, log 
     }
     if (event.type === "job.created") setImmediate(wakeWaiters);
   });
+
+  // A requester can queue a job for a capability no worker advertises; without
+  // this sweep it stays `queued` forever and the phone waits on it.
+  const staleSweep = setInterval(() => {
+    expireStaleJobs(store);
+    reclaimLostJobs(store);
+  }, 60_000);
+  staleSweep.unref?.();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -350,7 +424,7 @@ export async function startServer({ dataDir, host = "0.0.0.0", port = 7331, log 
       }
 
       if (pathname === "/api" || pathname === "/api/") {
-        json(res, 200, { ok: true, service: "relaydesk", version: "0.1.0" });
+        json(res, 200, { ok: true, service: "relaydesk", version: VERSION });
         return;
       }
 
@@ -379,6 +453,7 @@ export async function startServer({ dataDir, host = "0.0.0.0", port = 7331, log 
     freshToken: created,
     close: () => {
       if (!closing) {
+        clearInterval(staleSweep);
         closing = new Promise((resolve) => server.close(() => resolve()));
         // Long-poll waiters keep sockets open; release them so close() finishes.
         for (const waiter of [...waiters]) {

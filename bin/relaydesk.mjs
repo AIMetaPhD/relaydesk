@@ -21,6 +21,11 @@ Environment:
   RELAYDESK_RELAY_URL   relay base URL for worker/mcp
   RELAYDESK_TOKEN       pairing token for worker/mcp
 
+Security:
+  Prefer RELAYDESK_TOKEN over --token. A command-line argument is readable by
+  every local process (Task Manager, tasklist, shell history). The token is a
+  long-lived worker credential, not a one-time code.
+
 Notes:
   - serve binds all interfaces so a phone on the same LAN can open it.
   - the pairing token is printed once and stored 0600 in the data directory.
@@ -74,7 +79,7 @@ async function serve(options) {
     `  pairing    ${relay.pairingToken}${relay.freshToken ? "   (new)" : ""}`,
     "",
     "  open the URL on your phone, type the pairing token once.",
-    "  run a worker:  relaydesk worker --relay http://127.0.0.1:" + relay.port + " --token <token>",
+    "  run a worker:  RELAYDESK_TOKEN=<token> relaydesk worker --relay http://127.0.0.1:" + relay.port,
     "",
   ];
   console.log(lines.join("\n"));

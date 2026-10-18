@@ -1,4 +1,13 @@
-import { id, now, readJson, writeJsonAtomic, sha256 } from "./util.mjs";
+import { id, now, readJson, sha256 } from "./util.mjs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
+async function writeAtomic(path, contents) {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await writeFile(temporary, contents, "utf8");
+  await rename(temporary, path);
+}
 
 /**
  * Single-file JSON store. Writes are serialized and atomic (write + rename),
@@ -28,7 +37,13 @@ export class Store {
   }
 
   async flush() {
-    this.pending = this.pending.then(() => writeJsonAtomic(this.path, this.state));
+    // Snapshot at call time. Serializing the live object meant a later
+    // mutation could be written by an earlier queued flush, and a concurrent
+    // rename could interleave two writers on the same temp path.
+    const snapshot = JSON.stringify(this.state, null, 2) + "\n";
+    this.pending = this.pending
+      .catch(() => {})
+      .then(() => writeAtomic(this.path, snapshot));
     return this.pending;
   }
 

@@ -1,6 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 
 export function id(prefix = "") {
   return (prefix ? prefix + "_" : "") + randomBytes(9).toString("base64url");
@@ -29,13 +28,6 @@ export async function readJson(path, fallback = null) {
     if (error.code === "ENOENT") return fallback;
     throw error;
   }
-}
-
-export async function writeJsonAtomic(path, value) {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(temporary, JSON.stringify(value, null, 2) + "\n", "utf8");
-  await rename(temporary, path);
 }
 
 export function truncate(text, limit) {

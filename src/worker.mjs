@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { VERSION } from "./version.mjs";
 import { randomUUID } from "node:crypto";
 import { runCapability } from "./analysis/capabilities.mjs";
 import { parseDuration } from "./util.mjs";
@@ -57,25 +58,46 @@ export async function startWorker({
   };
   signal?.addEventListener?.("abort", stop);
 
-  let response = await request(relayUrl, "/worker/register", {
-    method: "POST",
-    token,
-    signal: signal || null,
-    body: {
-      workerId,
-      name,
-      capabilities: advertised,
-      platform: `${process.platform}/${process.arch}`,
-      version: "0.1.0",
-    },
-  });
-  if (!response.ok) throw new Error(`registration failed: HTTP ${response.status}`);
+  // Registration retries instead of exiting: a worker started at boot often
+  // finds the relay not yet listening, and exiting there means nobody notices
+  // until someone checks by hand. A 401 is the one unrecoverable answer.
+  let response = null;
+  let registerBackoff = 1000;
+  while (!stopping) {
+    try {
+      response = await request(relayUrl, "/worker/register", {
+        method: "POST",
+        token,
+        signal: signal || null,
+        body: {
+          workerId,
+          name,
+          capabilities: advertised,
+          platform: `${process.platform}/${process.arch}`,
+          version: VERSION,
+        },
+      });
+      if (response.status === 401) throw new Error("relay rejected the pairing token");
+      if (response.ok) break;
+      log(JSON.stringify({ event: "worker.register_failed", status: response.status, retry_in_ms: registerBackoff }));
+    } catch (error) {
+      if (/pairing token/.test(error.message)) throw error;
+      log(JSON.stringify({ event: "worker.register_failed", message: error.message, retry_in_ms: registerBackoff }));
+    }
+    await sleep(registerBackoff + Math.floor(Math.random() * 250));
+    registerBackoff = Math.min(registerBackoff * 2, 30000);
+  }
+  if (!response?.ok) {
+    log(JSON.stringify({ event: "worker.stopped", workerId, reason: "stopped before registering" }));
+    return { workerId };
+  }
   log(JSON.stringify({ event: "worker.registered", workerId, relayUrl, capabilities: advertised.length }));
   if (Array.isArray(response.value?.worker?.capabilities)) {
     advertised = response.value.worker.capabilities;
   }
 
   let lastBeat = Date.now();
+  let backoff = 0;
 
   while (!stopping) {
     try {
@@ -134,9 +156,16 @@ export async function startWorker({
       const done = await request(relayUrl, "/worker/complete", { method: "POST", token, body: payload });
       log(JSON.stringify({ event: "job.completed", jobId: job.id, ok: payload.ok, relayOk: done.ok }));
     } catch (error) {
-      log(JSON.stringify({ event: "worker.error", message: error.message }));
-      await sleep(Math.min(pollMs * 5, 15000));
+      // Exponential backoff with jitter. The old path used pollMs * 5, and
+      // pollMs defaults to 0, so an unreachable relay was retried in a tight
+      // loop. 401 is handled above and stops the worker instead.
+      backoff = Math.min(backoff === 0 ? 1000 : backoff * 2, 30000);
+      const wait = backoff + Math.floor(Math.random() * 250);
+      log(JSON.stringify({ event: "worker.error", message: error.message, retry_in_ms: wait }));
+      await sleep(wait);
+      continue;
     }
+    backoff = 0;
     await sleep(pollMs);
   }
 

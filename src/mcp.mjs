@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { VERSION } from "./version.mjs";
 import { capabilityList } from "./analysis/capabilities.mjs";
 
 /**
@@ -97,7 +98,7 @@ export function createMcpServer(config = {}) {
     initialize: (params) => ({
       protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
       capabilities: { tools: {}, resources: {} },
-      serverInfo: { name: "relaydesk", version: "0.1.0" },
+      serverInfo: { name: "relaydesk", version: VERSION },
     }),
     "notifications/initialized": () => undefined,
     "ping": () => ({}),

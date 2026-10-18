@@ -69,7 +69,7 @@ Then start a worker **on the computer that can actually reach the files and the
 tooling**:
 
 ```bash
-node bin/relaydesk.mjs worker --relay http://127.0.0.1:7331 --token 86a9101506e6de1d
+RELAYDESK_TOKEN=86a9101506e6de1d node bin/relaydesk.mjs worker --relay http://127.0.0.1:7331
 ```
 
 Queue a request from the phone — `file.kind` on a path, `tool.probe` to see what
@@ -93,7 +93,14 @@ node bin/relaydesk.mjs demo
 
 Capabilities are ~20 lines each in [`src/analysis/capabilities.mjs`](src/analysis/capabilities.mjs).
 Adding `ghidra.decompile` or a `jadx.manifest` lane is meant to be a small,
-reviewable change, not a new subsystem.
+reviewable change, not a new subsystem. Inputs are validated against the
+capability's declared schema first: unknown keys, missing required fields and
+non-object inputs are rejected before any tool runs.
+
+A job that no connected worker advertises is failed after 10 minutes with
+`no worker took this job`, so a phone never waits on a request that can never
+run. A worker that dies mid-job leaves its job `running` — there is no
+lease/heartbeat-based recovery yet.
 
 ## MCP
 
@@ -121,9 +128,12 @@ claude mcp add relaydesk -- node /absolute/path/to/relaydesk/bin/relaydesk.mjs m
   so a crash mid-write does not corrupt the case. No database, no migrations.
 - **Long-poll, not sleep.** Workers hold a 25-second poll open; a request queued
   from a phone is picked up in well under a second.
-- **Pairing token is single-use in spirit.** It is 16 hex characters, printed
-  once, stored `0600`, and only exchanges for a session cookie. Rotate it by
-  deleting `~/.relaydesk/pairing-token` and restarting the relay.
+- **The pairing token is a long-lived credential, not a one-time code.** It is
+  16 hex characters, printed once, stored `0600` on POSIX (Windows ignores that
+  mode and relies on the user-profile ACL), and it authenticates both browser
+  pairing and `/worker/*`. It does not expire. Rotate it by deleting
+  `~/.relaydesk/pairing-token` and restarting the relay — that invalidates
+  every existing worker and session.
 - **Evidence, not verdicts.** Each entry records where it came from
   (`browser`, `worker:<id>`) and what it is (`request`, `result`, `note`).
 
@@ -132,9 +142,14 @@ claude mcp add relaydesk -- node /absolute/path/to/relaydesk/bin/relaydesk.mjs m
 - **No cloud, no account, no telemetry.** The relay is a process on your machine.
 - **No TLS termination.** Put it behind Tailscale, a reverse proxy, or your own
   tunnel if the LAN is not trusted. Plain HTTP on a shared network is a real
-  risk, not a theoretical one.
+  risk, not a theoretical one: the pairing token travels in clear text and
+  grants full worker access to anyone who captures it. Bind to a specific
+  interface with `--host` rather than leaving `0.0.0.0` on an untrusted LAN.
 - **No RBAC.** There is one pairing token; everyone who pairs sees everything.
-- **No exactly-once delivery.** A worker that dies mid-job leaves it `running`.
+- **No exactly-once delivery.** If a worker goes silent mid-job the relay puts
+  the job back in the queue once; if that happens twice the job is failed. A
+  worker that completes work but loses its result before reporting can still
+  cause the job to run twice — the evidence will show it.
 - **No decompiler.** It routes to tools you already have; it does not bundle
   Ghidra, Hopper, IDA or JADX.
 - **Not a sandbox.** A worker runs with your user's permissions on any path you
@@ -156,7 +171,8 @@ Nothing in the relay or the worker is OS-specific.
 
 ## Status
 
-Version 0.1.0. Seven end-to-end tests pass (`node --test`). The UI was verified
+Version 0.1.1. Thirteen tests pass (`node --test`), stable across repeated runs
+and in a checkout path containing spaces and non-ASCII characters. The UI was verified
 in a headless browser at a 375 px viewport: pairing, case creation, request
 dispatch over long-poll, worker round trip and SSE updates all work.
 

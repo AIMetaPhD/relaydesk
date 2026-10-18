@@ -199,9 +199,17 @@ export function capabilityList() {
 export async function runCapability(name, input, ctx = {}) {
   const spec = CAPABILITIES[name];
   if (!spec) throw new Error(`unsupported capability: ${name}`);
+  if (input == null || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("input must be an object");
+  }
   for (const field of spec.input.required || []) {
     if (input[field] == null) throw new Error(`missing input: ${field}`);
   }
+  // Unknown keys usually mean a typo in a path or tool name; reject them
+  // instead of silently running with defaults.
+  const allowed = new Set(Object.keys(spec.input.properties || {}));
+  const unknown = Object.keys(input).filter((key) => !allowed.has(key));
+  if (unknown.length) throw new Error(`unknown input: ${unknown.join(", ")}`);
   const started = Date.now();
   const value = await spec.handler(ctx, input);
   return {

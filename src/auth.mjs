@@ -10,9 +10,9 @@ import { safeEqual } from "./util.mjs";
  * the browser holds a signed random session value.
  */
 export class Auth {
-  constructor({ tokenPath, ttlMs = 10 * 60 * 1000 }) {
+  constructor({ tokenPath, sessionTtlMs = 30 * 24 * 60 * 60 * 1000 }) {
     this.tokenPath = tokenPath;
-    this.ttlMs = ttlMs;
+    this.sessionTtlMs = sessionTtlMs;
     this.token = null;
     this.issuedAt = 0;
     this.sessions = new Map();
@@ -49,13 +49,26 @@ export class Auth {
     return this.token;
   }
 
+  /**
+   * Exchange the pairing token for a session. The token never expires: a
+   * relay that has been running for a month must still be pairable from a new
+   * phone. Rotation (delete the file + restart) is the revocation mechanism.
+   */
   pair(candidate) {
     if (!this.token) return null;
-    if (Date.now() - this.issuedAt > this.ttlMs) return null;
     if (!safeEqual(String(candidate || ""), this.token)) return null;
+    this.pruneSessions();
     const session = randomBytes(24).toString("base64url");
     this.sessions.set(session, { createdAt: Date.now(), lastSeen: Date.now() });
     return session;
+  }
+
+  /** Sessions idle for longer than sessionTtlMs are dropped so the map cannot grow without bound. */
+  pruneSessions() {
+    const cutoff = Date.now() - this.sessionTtlMs;
+    for (const [key, record] of this.sessions) {
+      if (record.lastSeen < cutoff) this.sessions.delete(key);
+    }
   }
 
   check(session) {
