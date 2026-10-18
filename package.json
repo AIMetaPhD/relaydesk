@@ -1,0 +1,34 @@
+{
+  "name": "relaydesk",
+  "version": "0.1.0",
+  "description": "A platform-neutral case file for agents, browsers, and analysis workers.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "relaydesk": "bin/relaydesk.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node bin/relaydesk.mjs serve",
+    "mcp": "node bin/relaydesk.mjs mcp",
+    "test": "node --test",
+    "demo": "node bin/relaydesk.mjs demo"
+  },
+  "keywords": [
+    "agents",
+    "mcp",
+    "reverse-engineering",
+    "triage",
+    "cross-platform",
+    "local-first"
+  ]
+}

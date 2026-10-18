@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#12100d" />
+<title>relaydesk</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2312100d'/><path d='M9 7h11l4 4v14H9z' fill='none' stroke='%23e8b04b' stroke-width='2'/></svg>" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div id="app" class="shell">
+
+  <header class="masthead">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>relaydesk</h1>
+        <p class="tagline">one case file · any device · any worker</p>
+      </div>
+    </div>
+    <div class="status" id="status">
+      <span class="dot" id="dot"></span>
+      <span id="status-text">connecting</span>
+    </div>
+  </header>
+
+  <section id="pair-screen" class="card pair hidden">
+    <h2>Pair this device</h2>
+    <p class="muted">
+      Find the pairing token in the terminal where <code>relaydesk serve</code> is running,
+      or in <code>~/.relaydesk/pairing-token</code>.
+    </p>
+    <form id="pair-form" autocomplete="off">
+      <label for="pair-token">Pairing token</label>
+      <input id="pair-token" name="token" inputmode="text" autocapitalize="off"
+             autocorrect="off" spellcheck="false" placeholder="e.g. 7Kd2mQx9aZ" required />
+      <button type="submit">Pair</button>
+      <p class="error" id="pair-error" role="alert"></p>
+    </form>
+  </section>
+
+  <main id="main" class="hidden">
+    <section class="card">
+      <div class="row between">
+        <h2>Cases</h2>
+        <button class="ghost" id="toggle-new" aria-expanded="false">New case</button>
+      </div>
+
+      <form id="case-form" class="stack hidden" autocomplete="off">
+        <label for="case-title">Title</label>
+        <input id="case-title" name="title" placeholder="e.g. why does the updater stall" required />
+        <label for="case-capability">Capability <span class="muted">(optional)</span></label>
+        <select id="case-capability" name="capability"></select>
+        <label for="case-tags">Tags <span class="muted">(comma separated)</span></label>
+        <input id="case-tags" name="tags" placeholder="windows, updater" />
+        <button type="submit">Open case</button>
+      </form>
+
+      <ul id="case-list" class="cases"></ul>
+      <p class="empty hidden" id="case-empty">No cases yet. Open one to start the paper trail.</p>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h2>Request</h2>
+        <span class="muted small">runs on a worker, not this phone</span>
+      </div>
+      <form id="job-form" class="stack" autocomplete="off">
+        <label for="job-case">Case</label>
+        <select id="job-case" name="caseId"></select>
+        <label for="job-capability">Capability</label>
+        <select id="job-capability" name="capability"></select>
+        <div id="job-input-fields" class="stack"></div>
+        <button type="submit">Queue request</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Workers</h2>
+      <ul id="worker-list" class="workers"></ul>
+      <p class="empty hidden" id="worker-empty">
+        No worker yet. Run <code>relaydesk worker --relay &lt;url&gt; --token &lt;token&gt;</code>
+        on any computer.
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h2>Activity</h2>
+        <span class="muted small" id="digest"></span>
+      </div>
+      <ol id="log-list" class="log"></ol>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>local-first · MIT</span>
+    <span id="server-addr" class="muted"></span>
+  </footer>
+</div>
+
+<template id="case-template">
+  <li class="case">
+    <button class="case-head" type="button">
+      <span class="case-title"></span>
+      <span class="case-meta"></span>
+    </button>
+    <div class="case-body">
+      <ul class="entries"></ul>
+      <form class="entry-form" autocomplete="off">
+        <input name="text" placeholder="Add a note to the file" required />
+        <button type="submit" class="ghost">Add</button>
+      </form>
+    </div>
+  </li>
+</template>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
