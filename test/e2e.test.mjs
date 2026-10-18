@@ -153,7 +153,7 @@ test("local capability run reports evidence", async () => {
 
 test("mcp stdio answers initialize and tools/list", async () => {
   const child = spawn(process.execPath, ["bin/relaydesk.mjs", "mcp"], {
-    cwd: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     stdio: ["pipe", "pipe", "pipe"],
   });
   const messages = [];
